@@ -1,0 +1,204 @@
+#!/usr/bin/python3
+
+import numpy as np
+import pandas as pd
+import scipy.stats as scs
+import bs4 as bs
+import datetime as dt
+import os
+import pickle
+import requests
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import quandl
+import csv
+import scipy
+import scipy.fftpack
+import statsmodels.tsa.stattools as ts
+import statsmodels as smt
+import random
+import glob
+import statsmodels.api as sm
+import datetime as dt
+from pandas.plotting import autocorrelation_plot
+from operator import itemgetter
+from sklearn.linear_model import LinearRegression, LogisticRegression
+from sklearn.ensemble import RandomForestRegressor
+from dateutil import parser
+from pandas.plotting import register_matplotlib_converters
+from pylab import *
+from matplotlib import style
+from statsmodels.tsa.stattools import adfuller
+from pykalman import KalmanFilter
+from sklearn.metrics import r2_score, mean_squared_error
+
+# pd.core.common.is_list_like = pd.api.types.is_list_like # necessary in some pandas versions
+# import pandas_datareader.data as web
+
+def read_data():
+    filename = 'AAPL.csv'
+    df = pd.read_csv(filename)[['Date', 'Adj. Open','Adj. High','Adj. Low','Adj. Close','Adj. Volume']]
+    df.columns = ['date','open','high','low','close','volume']
+    return(df)
+
+def derv(df):
+    df['derv0'] = df['close'].values
+    df['derv1'] = df['derv0'].diff()
+    df['derv2'] = df['derv1'].diff()
+    df.dropna(inplace=True)
+    return(df)
+
+def prdict(x, v, t, a):
+    A = np.array([[1, t],
+                  [0, 1]])
+    X = np.array([[x],
+                  [v]])
+    B = np.array([[0.5 * t ** 2],
+                  [t]])
+    X_prime = A.dot(X) + B.dot(a)
+    return(X_prime)
+
+def cov_mat(sigma1, sigma2):
+    cov1_2 = sigma1 * sigma2
+    cov2_1 = sigma2 * sigma1
+    cov_matrix = np.array([[sigma1 ** 2, cov1_2],
+                           [cov2_1, sigma2 ** 2]])
+    return(np.diag(np.diag(cov_matrix)))
+
+def get_data():
+    df = read_data()
+    df_derv = derv(df)
+    return(df_derv)
+
+def kalman_lib(ts):
+    kf = KalmanFilter(n_dim_obs=1, n_dim_state=2)
+    kf = KalmanFilter(em_vars='all')
+    kf = kf.em(ts)
+    kf.initial_state_mean = ts[0]
+    (smoothed_state_means, smoothed_state_covariances) = kf.smooth(ts)
+    return(smoothed_state_means, smoothed_state_covariances)
+
+def plot_data(df,price_imp,velocity_imp,price_lib):
+    tt = df['date']
+    fig = figure(figsize=(32,20))
+    ax1 = fig.add_subplot(211)
+    ax1.plot(price_imp,label='predicted price')
+    ax1.plot(df['derv0'].values,label='actual price')
+    plt.title('implemented')
+    plt.legend()
+
+    ax2 = fig.add_subplot(212)
+    ax2.plot(price_lib,label='predicted price')
+    ax2.plot(df['derv0'].values,label='actual velocity')
+    plt.title('library')
+    plt.legend()
+
+    plt.show()
+
+    # ax2 = fig.add_subplot(212)
+    # ax2.plot(velocity_imp,label='predicted velocity')
+    # ax2.plot(df['derv1'].values,label='actual velocity')
+    # plt.legend()
+    # plt.show()
+    
+if __name__ == '__main__':
+    df_derv = get_data()
+
+    price_observations = df_derv['derv0'].values
+    veloc_observations = df_derv['derv1'].values
+
+    # Kalman filter based on Python library
+    smoothed_state_means, smoothed_state_covariances = kalman_lib(price_observations)
+    price_pred_kalman_lib = smoothed_state_means[:,0]
+    
+    # Kalman filter implementation
+    z = np.c_[price_observations, veloc_observations]
+    n = len(z[0])
+    
+    # initial conditions
+    # acclr = df_derv['derv2'].values[0]  # acceleration
+    veloc_init = df_derv['derv1'].values[0]
+
+    # difference in time
+    t = 1
+
+    # process / estimation errors
+    error_est_price = np.std(df_derv['derv0']) * (t/len(df_derv))
+    error_est_veloc = np.std(df_derv['derv1']) * (t/len(df_derv))
+
+    # observation errors (for R matrix)
+    error_obs_price = np.std(df_derv['derv0'])
+    error_obs_veloc = np.std(df_derv['derv1'])
+
+    # dynamics matrix
+    A = np.array([[1, t],
+                  [0, 1]])
+
+    # initial estimation covariance matrix
+    P = cov_mat(error_est_price, error_est_veloc)
+
+    # control matrix
+    B = np.array([[0.5 * t ** 2],
+                  [t]])
+
+    # control input (through acceleration)
+    u = np.std(df_derv['derv2'].values)
+    
+    # process noise covariance matrix
+    Q = np.dot(B,B.T)*u
+
+    # measuring matrix
+    H = np.identity(n)
+
+    # measurment noise covariance matrix
+    R = cov_mat(error_obs_price, error_obs_veloc)
+    
+    # initial state matrix
+    X = np.array([[z[0][0]],
+                  [z[0][1]]])
+
+    price_pred_kalman_imp = []
+    veloc_pred_kalman_imp = []
+    kalman_gain_11 = []
+    kalman_gain_12 = []
+    kalman_gain_21 = []
+    kalman_gain_22 = []
+    
+    for i,data in enumerate(z[1:]):
+        X = prdict(X[0][0], X[1][0], t, df_derv['derv2'].values[i])
+        P = np.diag(np.diag(A.dot(P).dot(A.T))) + Q # np.dot(A, np.dot(P, A.T)) + Q
+
+        # Kalman gain
+        S = H.dot(P).dot(H.T) + R
+        K = P.dot(H).dot(inv(S))
+
+        kalman_gain_11.append(K[0][0])
+        kalman_gain_12.append(K[0][1])
+        kalman_gain_21.append(K[1][0])
+        kalman_gain_22.append(K[1][1])
+        
+        # reshape the new data into the measurement space.
+        Y = H.dot(data).reshape(n,-1)
+
+        # update the state matrix
+        # combination of the predicted state, measured values,
+        # covariance matrix and Kalman Gain
+        X = X + K.dot(Y-H.dot(X))
+
+        # update process covariance matrix
+        P = (np.identity(len(K)) - K.dot(H)).dot(P)
+        price_pred_kalman_imp.append(X[0][0])
+        veloc_pred_kalman_imp.append(X[1][0])
+       
+# plot_data(df_derv,price_pred_kalman_imp,veloc_pred_kalman_imp,price_pred_kalman_lib)
+plt.plot(kalman_gain_22)
+plt.show()
+
+# print("#########################################################################################################")
+# print("implemented kalman filter - r2 = ", r2_score(df_derv['derv0'].values[1:],price_pred_kalman_imp))
+# print("library kalman filter - r2 = ", r2_score(df_derv['derv0'].values,price_pred_kalman_lib))
+# print("implemented kalman filter - rmse = ", mean_squared_error(df_derv['derv0'].values[1:],price_pred_kalman_imp))
+# print("library kalman filter - rmse = ", mean_squared_error(df_derv['derv0'].values,price_pred_kalman_lib))
+# print("#########################################################################################################")
+
