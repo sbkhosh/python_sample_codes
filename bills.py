@@ -10,5 +10,5 @@ def comb_100(bills):
                 makes_100.append(combination)
     return(makes_100)
 
-bills = [20,20,20,10,10,10,10,10,5,5,5,1,1,1,1,1]
-print(len(comb_100(bills)))
+bills = [20,20,20,10,10,10,10,10]
+print(comb_100(bills))

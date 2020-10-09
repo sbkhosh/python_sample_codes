@@ -42,3 +42,5 @@ if __name__ == '__main__':
     wrapped = [ wrapper(fibo_1, n), wrapper(fibo_1, n) ]
     res = [ timeit.timeit(el, number=1000) for el in wrapped ]
     print(res)
+
+    

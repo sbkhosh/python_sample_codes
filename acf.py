@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import scipy.stats as scs
 import statsmodels.api as sm
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+from statsmodels.tsa.stattools import adfuller
 
 def tsplot(y, lags=None, figsize=(15, 10), style='bmh'):
     if not isinstance(y, pd.Series):
@@ -32,6 +33,27 @@ def tsplot(y, lags=None, figsize=(15, 10), style='bmh'):
         plt.show()
     return
 
+def get_stationarity(timeseries):
+    # rolling statistics
+    rolling_mean = timeseries.rolling(window=252).mean()
+    rolling_std = timeseries.rolling(window=252).std()
+    
+    # rolling statistics plot
+    original = plt.plot(timeseries, color='blue', label='Original')
+    mean = plt.plot(rolling_mean, color='red', label='Rolling Mean')
+    std = plt.plot(rolling_std, color='black', label='Rolling Std')
+    plt.legend(loc='best')
+    plt.title('Rolling Mean & Standard Deviation')
+    plt.show(block=False)
+    
+    # Dickey–Fuller test:
+    print(timeseries)
+    result = adfuller(timeseries)
+    print('ADF Statistic: {}'.format(result[0]))
+    print('p-value: {}'.format(result[1]))
+    print('Critical Values:')
+    for key, value in result[4].items():
+        print('\t{}: {}'.format(key, value))
 
 if __name__ == '__main__':
     np.random.seed(1)
@@ -45,4 +67,6 @@ if __name__ == '__main__':
     for t in range(n_samples):
         x[t] = x[t-1] + w[t]
 
-    tsplot(x, lags=lgs)
+    df = pd.DataFrame(x)
+    get_stationarity(df)
+    # tsplot(x, lags=lgs)
