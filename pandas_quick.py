@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import re
 
 def view_data(df):
     print(df.head())
@@ -26,6 +27,9 @@ def dataframe_3():
     view_data(df)
     print(df.apply(lambda x: x.max()))
 
-dataframe_3()
-
+def get_data():
+    df = pd.read_csv('file.csv')
+    print(df.loc[df['Type 1'].str.contains('fire|grass', flags=re.I, regex=True)])
+    
+get_data()
 
