@@ -551,3 +551,31 @@ def standard_deviation(df, n):
     """
     df = df.join(pd.Series(df['Close'].rolling(n, min_periods=n).std(), name='STD_' + str(n)))
     return df
+
+# these two following definitions are equivalent
+
+def ATR1(df,period):
+    if not isinstance(period, int):
+        raise TypeError('Period parameter is not periodic.')
+
+    high_low = df['high'] - df['low']
+    high_close = np.abs(df['high'] - df['close'].shift())
+    low_close = np.abs(df['low'] - df['close'].shift())
+
+    ranges = pd.concat([high_low, high_close, low_close], axis=1)
+    true_range = np.max(ranges, axis=1)
+
+    atr = true_range.ewm(span=period, min_periods=period).mean()
+    return atr
+
+def ATR2(df,period):
+    df['close shifted'] = df['close'].shift(1)
+    df['high minus low'] = df['high']-df['low']
+    df['low minus previous close'] = df['low']-df['close shifted']
+    df['high minus previous close'] = df['high']-df['close shifted']
+    df['true range'] = abs(df[['high minus low','low minus previous close','high minus previous close']]).max(axis=1)
+
+    df['atr'] = (df['high minus low'].rolling(period-1).sum()+df['high minus low'])/period
+    return(df)
+    
+

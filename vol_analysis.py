@@ -12,7 +12,7 @@ factor_1h = 24
 window = 20
 flag = 'open'
 
-filename='BTCUSDT-1d-data.csv'
+filename='/home/sbkhosh/home_dir/nwd/app_new/programming/python/python_codes/projects/quant_trading/ammer_capital/data_feeds/data/BTCUSDT-1d-data.csv'
 
 df=pd.read_csv(filename)
 df=df[['timestamp','open','high','low','close','volume']]
@@ -62,4 +62,6 @@ plt.show()
 
 # for el1,el2 in zip(returns_1.to_list(),returns_2.to_list()):
 #     print(el1-el2)
+
+
 
